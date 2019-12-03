@@ -1,0 +1,332 @@
+---
+title: "PULSAR star prediction"
+output: html_notebook
+---
+
+```{r}
+# Predicting PULSAR Star
+
+getwd()
+setwd("/home/myubu/R_projects_Github/Pulsar_Star_prediction_R")
+
+pulsar <- read.csv("pulsar_stars.csv")
+
+str(pulsar)
+
+head(pulsar)
+
+library(caret)
+library(caretEnsemble)
+library(mlbench)
+library(ggplot2)
+library(GGally)
+
+```
+
+
+```{r}
+
+# Distribution of Target Variable
+prop.table(table(pulsar$target_class))
+
+## There is big class imbalance with 90.8% predictions for "NOT PULSAR STAR"
+## & 9.1% for "PULSAR STAR".
+
+options(repr.plot.width=4, repr.plot.height=8)
+ggplot(data = pulsar, aes(x=target_class)) + 
+geom_bar(width = 0.1, fill = "steelblue") +
+geom_text(stat='count', aes(label=..count..), vjust=-0.5)
+
+options(repr.plot.width=10, repr.plot.height=15)
+ggpairs(pulsar, aes(colour=as.factor(target_class), alpha=0.4))
+
+```
+
+```{r}
+
+dim(pulsar)
+
+# splitting data into train and test
+seed <- 7
+set.seed(seed)
+split = 0.8
+trainindex <- createDataPartition(y = pulsar$target_class,
+                                 p = split,
+                                 list = F )
+
+train_data <- pulsar[trainindex,]
+test_data <- pulsar[-trainindex,]
+
+# Checking the dimension of train & test data
+dim(train_data)
+dim(test_data)
+
+# Plotting the distribution of Target Variable in Test Data
+options(repr.plot.width=4, repr.plot.height=8)
+ggplot(data = test_data, aes(x=target_class)) + 
+geom_bar(width = 0.1, fill = "steelblue") +
+geom_text(stat='count', aes(label=..count..), vjust=-0.5)
+
+```
+
+```{r}
+
+seed <- 7
+metric <- "Accuracy"
+control <- trainControl(method = "repeatedcv",
+                       number = 10,
+                       repeats = 3)
+
+```
+
+```{r}
+
+set.seed(seed)
+# Using Logistic Regerssion classifier, to evaluate performance of sampling techniques.
+# Here we are using data as is, without applying any sampling technique.
+fit.glm <- train(as.factor(target_class)~.,
+                data = train_data,
+                method = "glm",
+                preProc = c("center", "scale"),
+                trControl = control,
+                metric = metric)
+
+# Making Predictions
+test_features <- test_data[,1:8]
+test_target <- test_data[,9]
+
+glm_predictions <- predict(fit.glm,test_features)
+
+length(test_target)
+
+# summarize results
+confusionMatrix(glm_predictions, as.factor(test_target), positive = "1")
+
+# Without any Sampling to take care of class imbalance, we have got an accuracy of  260 / 321 (80.99%)
+
+```
+
+```{r}
+
+#### Our objective for this exercise is to correctly classify as many Pulsar stars as possible. So we will use different classification models and sampling techniques to achieve highest correct classification (1).
+
+set.seed(seed)
+# Using Logistic Regerssion classifier, to evaluate performance of sampling techniques.
+# Here we are "upsampling the data".
+control$sampling <- "up"
+fit.glm_up <- train(as.factor(target_class)~.,
+                data = train_data,
+                method = "glm",
+                preProc = c("center", "scale"),
+                trControl = control,
+                metric = metric)
+
+glm_predictions_up <- predict(fit.glm_up, test_features)
+confusionMatrix(glm_predictions_up, as.factor(test_target), positive = "1")
+
+# By upSampling to take care of class imbalance, we have got an accuracy of  294 / 321 (91.58%)
+
+```
+
+```{r}
+
+set.seed(seed)
+# Using Logistic Regerssion classifier, to evaluate performance of sampling techniques.
+# Here we are "SMOTEsampling the data".
+control$sampling <- "smote"
+fit.glm_smote <- train(as.factor(target_class)~.,
+                data = train_data,
+                method = "glm",
+                preProc = c("center", "scale"),
+                trControl = control,
+                metric = metric)
+
+glm_predictions_smote <- predict(fit.glm_smote, test_features)
+confusionMatrix(glm_predictions_smote, as.factor(test_target), positive = "1")
+
+# By SMOTE Sampling to take care of class imbalance, we have got an accuracy of  292 / 321 (90.97%)
+
+```
+
+We will use UPSAMPLING with different classifiers, to check if we can achieve better score.
+
+We will use the below classifiers: 
+
+LDA, SVM, KNN, NaiveBayes, CART, Bagged CART, Random Forest, Gradient Boosting.
+
+
+
+```{r}
+
+#LDA
+control$sampling = "up"
+set.seed(seed)
+fit.pulsar.lda_up = train(as.factor(target_class)~., 
+                          data = train_data, 
+                          method = "lda", 
+                          preProc = c("center", "scale"), 
+                          trControl = control, 
+                          metric = metric)
+
+# LDA
+pulsar_lda_up_predictions <- predict(fit.pulsar.lda_up,test_features)
+confusionMatrix(pulsar_lda_up_predictions, as.factor(test_target), positive = "1")
+
+# LDA predicted 285 / 321 (88.79%) class 1's accurately
+
+#SVMRADIAL
+control$sampling = "up"
+set.seed(seed)
+fit.pulsar.svmradial_up = train(as.factor(target_class)~., 
+                                data = train_data, 
+                                method = "svmRadial", 
+                                preProc = c("center", "scale"), 
+                                trControl = control, 
+                                metric = metric)
+
+# SVM
+pulsar_svm_up_predictions <- predict(fit.pulsar.svmradial_up,test_features)
+confusionMatrix(pulsar_svm_up_predictions, as.factor(test_target), positive = "1")
+
+# SVM predicted 293 / 321 (91.28%) class 1's accurately
+
+#KNN
+control$sampling = "up"
+set.seed(seed)
+fit.pulsar.knn_up = train(as.factor(target_class)~., 
+                          data = train_data, 
+                          method = "knn", 
+                          preProc = c("center", "scale"), 
+                          trControl = control, 
+                          metric = metric)
+
+# KNN
+pulsar_knn_up_predictions <- predict(fit.pulsar.knn_up,test_features)
+confusionMatrix(pulsar_knn_up_predictions, as.factor(test_target), positive = "1")
+
+# KNN predicted 293 / 321 (91.28%) class 1's accurately
+
+#NaiveBayes
+control$sampling = "up"
+set.seed(seed)
+fit.pulsar.nb_up = train(as.factor(target_class)~., 
+                         data = train_data, 
+                         method = "nb", 
+                         preProc = c("center", "scale"), 
+                         trControl = control, 
+                         metric = metric)
+
+# NB
+pulsar_nb_up_predictions <- predict(fit.pulsar.nb_up,test_features)
+confusionMatrix(pulsar_nb_up_predictions, as.factor(test_target), positive = "1")
+
+# NB predicted 282 / 321 (87.85%) class 1's accurately
+
+#CART
+control$sampling = "up"
+set.seed(seed)
+fit.pulsar.cart_up = train(as.factor(target_class)~., 
+                           data = train_data, 
+                           method = "rpart", 
+                           preProc = c("center", "scale"), 
+                           trControl = control, 
+                           metric = metric)
+
+# CART
+pulsar_cart_up_predictions <- predict(fit.pulsar.cart_up,test_features)
+confusionMatrix(pulsar_cart_up_predictions, as.factor(test_target), positive = "1")
+
+# CART predicted 272 / 321 (84.74%) class 1's accurately
+
+#Bagged CART
+control$sampling = "up"
+set.seed(seed)
+fit.pulsar.treebag_up = train(as.factor(target_class)~., 
+                              data = train_data, 
+                              method = "treebag", 
+                              preProc = c("center", "scale"), 
+                              trControl = control, 
+                              metric = metric)
+
+# Bagging
+pulsar_bagging_up_predictions <- predict(fit.pulsar.treebag_up,test_features)
+confusionMatrix(pulsar_bagging_up_predictions, as.factor(test_target), positive = "1")
+
+# Bagging predicted 274 / 321 (85.36%) class 1's accurately
+
+#Random Forest
+control$sampling = "up"
+set.seed(seed)
+fit.pulsar.rf_up = train(as.factor(target_class)~., 
+                         data = train_data, 
+                         method = "rf", 
+                         preProc = c("center", "scale"), 
+                         trControl = control, 
+                         metric = metric)
+
+# Random Forest Score
+pulsar_rf_up_predictions <- predict(fit.pulsar.rf_up,test_features)
+confusionMatrix(pulsar_rf_up_predictions, as.factor(test_target), positive = "1")
+
+# RF predicted 275 / 321 (85.67%) class 1's accurately
+
+#Stochastic Gradient Boosting
+control$sampling = "up"
+set.seed(seed)
+fit.pulsar.sgb_up = train(as.factor(target_class)~., 
+                          data = train_data, 
+                          method = "gbm", 
+                          preProc = c("center", "scale"), 
+                          trControl = control, 
+                          metric = metric)
+
+# GBM
+pulsar_sgb_up_predictions <- predict(fit.pulsar.sgb_up,test_features)
+confusionMatrix(pulsar_sgb_up_predictions, as.factor(test_target), positive = "1")
+
+# GBM predicted 294 / 321 (91.59%) class 1's accurately
+
+```
+
+Looks like, both KNN & GBM algorithm's are the best classifiers with highest accuracy among all.
+
+GBM is the best, with an accuracy(correctly predicting 1) of 91.59% and an AUC of 94.34
+
+```{r}
+results <- resamples(list(lda=fit.pulsar.lda_up, logistic=fit.glm_up,
+                          svm=fit.pulsar.svmradial_up, knn=fit.pulsar.knn_up, nb=fit.pulsar.nb_up, cart=fit.pulsar.cart_up, bagging=fit.pulsar.treebag_up, rf=fit.pulsar.rf_up, gbm=fit.pulsar.sgb_up))
+# Table comparison
+print(summary(results))
+```
+
+```{r}
+# boxplot comparison
+print(bwplot(results))
+
+# Dot-plot comparison
+print(dotplot(results))
+```
+
+
+```{r}
+# Plotting Variable importance using Random Forest Model
+
+plot(varImp(fit.pulsar.rf_up))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
